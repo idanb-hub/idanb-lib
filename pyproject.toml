@@ -1,0 +1,25 @@
+[project]
+name = "idanb-lib"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "anywidget>=0.9.21",
+    "ipykernel>=7.1.0",
+    "ipython>=9.9.0",
+    "itables[widget]>=2.6.2",
+    "perspective-python>=4.0.1",
+    "polars[pyarrow]>=1.37.0",
+    "pydantic>=2.12.5",
+    "pyyaml>=6.0.3",
+    "service-connectors-v2[intelowl,trino]",
+    "solara-ui[markdown]>=1.56.0",
+    "structlog>=25.5.0",
+]
+
+[dependency-groups]
+dev = [
+    "typing-extensions>=4.15.0",
+]
+
+[tool.uv.sources]
+service-connectors-v2 = { git = "ssh://git@gitlab.ics.muni.cz/csirt-mu-analytics/service-connectors-v2.git" }
