@@ -22,4 +22,4 @@ dev = [
 ]
 
 [tool.uv.sources]
-service-connectors-v2 = { git = "ssh://git@gitlab.ics.muni.cz/csirt-mu-analytics/service-connectors-v2.git" }
+service-connectors-v2 = { git = "https://github.com/idanb-hub/service-connectors.git" }
