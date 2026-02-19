@@ -1,4 +1,4 @@
-"""Core library used by all other modules."""
+"""Standalone utilities."""
 
 from . import (
     asynctools as asynctools,
