@@ -4,11 +4,26 @@ import asyncio
 import contextvars
 import typing
 
+from .typeutils import copy_signature_from
+
 if typing.TYPE_CHECKING:
     import typing_extensions as T
 
 
 _background_tasks: set[asyncio.Task[object]] = set()
+
+
+@copy_signature_from(asyncio.create_task).keep_return
+def fire_and_forget(*args: T.Any, **kwargs: T.Any) -> None:
+    """Run a coroutine the the background.
+
+    Same as `asyncio.create_task`, but prevents the task from being garbage
+    collected before it is done.
+    """
+    task = asyncio.create_task(*args, **kwargs)
+    # Prevent task from being garbage-collected before it is done.
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 class ReturnFromAsyncGenerator(Exception):  # noqa: N818

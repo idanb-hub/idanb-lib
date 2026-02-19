@@ -1,0 +1,25 @@
+.widget-logs {
+    padding-left: 3px;
+}
+.widget-logs summary {
+    font-weight: bold;
+}
+.widget-logs .widget-logs__controls {
+    float: right;
+}
+.widget-logs details.widget-logs__expandable[open] ~ .widget-logs__status {
+    display: none;
+}
+.widget-logs .widget-logs__status {
+    width: 100%;
+    overflow: hidden;
+    white-space: preserve nowrap;
+    text-overflow: ellipsis;
+}
+.widget-logs .widget-logs__logs {
+    width: 100%;
+    max-height: 30rem;
+    overflow: hidden auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
