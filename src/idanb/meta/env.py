@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import os
 import sys
-import typing
 
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
+import typing_extensions as T
 
 
 def is_notebook() -> bool:

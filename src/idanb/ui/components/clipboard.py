@@ -1,22 +1,17 @@
 from __future__ import annotations
 
-import typing
-
-import reacton
+import typing_extensions as T
 from ipymui.components import mui
 
+from idanb import react
 from idanb.ui.widgets import CopyToClipboard as CopyToClipboardWidget
 
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
-    from reacton.core import Element
 
-
-@reacton.component
+@react.component
 def CopyToClipboard(  # noqa: N802
     data: str,
     depth: int = 0,
-) -> Element[CopyToClipboardWidget]:
+) -> react.Element[CopyToClipboardWidget]:
     """Copies `data` to clipboard when containing element is clicked.
 
     The "containing element" is a predecessor `depth` levels higher in the DOM
@@ -29,15 +24,15 @@ def CopyToClipboard(  # noqa: N802
         Text(text)
     ```
     """  # noqa: D401
-    return CopyToClipboardWidget.element(data=data, depth=depth)  # pyright: ignore[reportAttributeAccessIssue]
+    return CopyToClipboardWidget.element(data=data, depth=depth)
 
 
-@reacton.component
+@react.component
 def ClipboardButton(  # noqa: N802
     *,
     data: str,
     **kwargs: T.Any,
-) -> Element[T.Any]:
+) -> react.Element[T.Any]:
     """Same as `mui.Button` but copies `data` to clipboard when clicked."""  # noqa: D401
     with mui.Button(**kwargs) as btn:
         # Increased depth because button content is inside one extra wrapper.

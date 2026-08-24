@@ -6,8 +6,7 @@ import enum
 import pydantic
 
 from analytics.connectors.trino import TrinoConfig
-from idanb import utils
-from idanb.utils.config import CONFIG
+from idanb import meta, utils
 
 
 class Host(enum.StrEnum):
@@ -34,7 +33,7 @@ class DataPlatformConfigCatalogs(
     pass
 
 
-@CONFIG.register("data_platform")
+@meta.CONFIG.register("data_platform")
 @pydantic.dataclasses.dataclass()
 class DataPlatformConfig:
     hosts: DataPlatformConfigHosts

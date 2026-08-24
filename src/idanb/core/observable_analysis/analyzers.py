@@ -1,21 +1,14 @@
 from __future__ import annotations
 
-import typing
-
+import typing_extensions as T
 import polars as pl
-import reacton
 from ipymui.components import mui
 from itables.widget import ITable
 
 from analytics.connectors.intelowl.models import plugins
-from idanb import ui
+from idanb import react, ui
 
 from .component import analyzer_report_component
-
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
-    from reacton.core import Element
-
 
 ALL_ANALYZERS = [
     plugins.Classic_DNS,
@@ -28,7 +21,7 @@ ALL_ANALYZERS = [
 
 
 @analyzer_report_component()
-@reacton.component
+@react.component
 def IPApi(report: plugins.IPApi) -> None:  # noqa: N802
     with mui.Box():
         mui.Typography("IP Info", variant="h5")
@@ -43,20 +36,22 @@ def IPApi(report: plugins.IPApi) -> None:  # noqa: N802
 
 
 @analyzer_report_component()
-@reacton.component
-def Mnemonic_PassiveDNS(report: plugins.Mnemonic_PassiveDNS) -> Element[T.Any]:  # noqa: N802
+@react.component
+def Mnemonic_PassiveDNS(  # noqa: N802
+    report: plugins.Mnemonic_PassiveDNS,
+) -> react.Element[T.Any]:
     df = pl.DataFrame(report.report)
     return ITable.element(df=df)
 
 
 @analyzer_report_component()
-@reacton.component
+@react.component
 def TorProject(report: plugins.TorProject) -> None:  # noqa: N802
     ui.SimpleDictTable(report.report)
 
 
 @analyzer_report_component()
-@reacton.component
+@react.component
 def Classic_DNS(report: plugins.Classic_DNS) -> None:  # noqa: N802
     resolutions = pl.DataFrame(
         data=[
@@ -68,7 +63,7 @@ def Classic_DNS(report: plugins.Classic_DNS) -> None:  # noqa: N802
 
 
 @analyzer_report_component()
-@reacton.component
+@react.component
 def Robtex(report: plugins.Robtex) -> None:  # noqa: N802
     dfs: dict[str, pl.DataFrame] = {}
 
@@ -86,7 +81,7 @@ def Robtex(report: plugins.Robtex) -> None:  # noqa: N802
                 .rename({"o": "name", "t": "time"})
                 .sort("time", descending=True)
                 .with_columns(pl.lit(key).alias("source"))
-                for key in ["act", "acth", "pas", "pash"]
+                for key in ["act", "acth", "pas", "pash"]  # codespell:ignore
             )
 
             ui.SimpleDictTable(ip_report)
@@ -99,7 +94,7 @@ def Robtex(report: plugins.Robtex) -> None:  # noqa: N802
 
 
 @analyzer_report_component()
-@reacton.component
+@react.component
 def WhoIs_RipeDB_Search(  # noqa: N802
     report: plugins.WhoIs_RipeDB_Search,
 ) -> None:

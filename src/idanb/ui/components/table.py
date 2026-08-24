@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import collections.abc
 import html
-import typing
 
-import reacton
+import typing_extensions as T
 from ipymui.components import mui
 
-if typing.TYPE_CHECKING:
+from idanb import react
+
+if T.TYPE_CHECKING:
     import polars as pl
-    import typing_extensions as T
-    from reacton.core import Element
 
 
 def get_module(obj: object) -> str:
@@ -51,14 +50,14 @@ def infer_columns(data: object) -> T.Sequence[object]:
     raise TypeError(errmsg)
 
 
-@reacton.component
+@react.component
 def SimpleTable(  # noqa: N802
     data: T.Any,
     *,
     columns: T.Sequence[object] | None = None,
     head: T.Sequence[str] | None = None,
     raw: bool = False,
-) -> Element[T.Any]:
+) -> react.Element[T.Any]:
     """Simple static table that displays given data.
 
     Args:
@@ -96,14 +95,14 @@ def SimpleTable(  # noqa: N802
     return container
 
 
-@reacton.component
+@react.component
 def SimpleDictTable[Key](  # noqa: N802
     # Generic because Mapping's key type is invariant.
     data: T.Mapping[Key, object],
     *,
     head: tuple[str, str] | tuple[()] = (),
     raw: bool = False,
-) -> Element[T.Any]:
+) -> react.Element[T.Any]:
     """Small wrapper around `SimpleTable` for displaying dictionaries."""
 
     dump: T.Callable[[object], str] = (

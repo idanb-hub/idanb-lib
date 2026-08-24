@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 import sys
-import typing
+import typing  # noqa: TID251
 import uuid
 
 import reacton

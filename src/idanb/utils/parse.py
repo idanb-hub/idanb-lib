@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import enum
 import re
-import typing
 
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
+import typing_extensions as T
 
 
 def substr_swap(
@@ -73,7 +71,7 @@ class RegexEnum(enum.Enum):  # pyright: ignore[reportRedeclaration]
         patterns = [f"(?P<{member.name}>{member.pattern})" for member in cls]
         cls.re = re.compile("|".join(patterns))
 
-    @typing.override
+    @T.override
     def __eq__(self, other: object) -> bool:
         cls = type(self)
 
@@ -87,12 +85,12 @@ class RegexEnum(enum.Enum):  # pyright: ignore[reportRedeclaration]
 
         return super().__eq__(other)
 
-    @typing.override
+    @T.override
     def __hash__(self) -> int:
         return super().__hash__()
 
 
-if typing.TYPE_CHECKING:
+if T.TYPE_CHECKING:
     # Otherwise pyright thinks `.re` in `RegexEnum` subclasses is `Any`.
     # IDK why, from my experience typing gets a little weird around enums.
 

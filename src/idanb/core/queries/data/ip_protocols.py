@@ -3,14 +3,11 @@ from __future__ import annotations
 import csv
 import dataclasses
 import itertools
-import typing
 from pathlib import Path
 
+import typing_extensions as T
+
 from idanb import utils
-
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
-
 
 # https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
 CSVPATH = Path(__file__).with_suffix(".csv")
@@ -25,7 +22,7 @@ class IPProtocol:
     def __int__(self) -> int:
         return self.number
 
-    @typing.override
+    @T.override
     def __str__(self) -> str:
         return self.name
 

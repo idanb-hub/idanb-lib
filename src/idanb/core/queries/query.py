@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import itertools
 import string
-import typing
 
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
-
+import typing_extensions as T
 
 SQL_FMTSPEC: T.Final = "SQL"
 
@@ -21,7 +18,7 @@ class _QueryFormatter(string.Formatter):
         self._on_param = on_param
         super().__init__()
 
-    @typing.override
+    @T.override
     def vformat(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         format_string: str,
@@ -30,7 +27,7 @@ class _QueryFormatter(string.Formatter):
     ) -> str:
         return super().vformat(format_string, args, kwargs)
 
-    @typing.override
+    @T.override
     def format_field(
         self,
         value: object,
@@ -59,7 +56,7 @@ class Query:
     >>> q.query
     'SELECT ?'
     >>> q.params
-    ('1',)
+    (1,)
 
     To insert raw SQL, use the custom `:SQL` format specifier.
 
@@ -74,7 +71,7 @@ class Query:
     >>> q.query
     '? + ? - ?'
     >>> q.params
-    ('1', '2', '3')
+    (1, 2, 3)
     """
 
     # https://peps.python.org/pep-0622/#special-attribute-match-args
@@ -105,7 +102,7 @@ class Query:
     def __bool__(self) -> bool:
         return bool(self._query)
 
-    @typing.override
+    @T.override
     def __eq__(self, value: object, /) -> bool:
         match value:
             case str():
@@ -115,7 +112,7 @@ class Query:
             case _:
                 return False
 
-    @typing.override
+    @T.override
     def __hash__(self) -> int:
         return hash(tuple(self)) if self._params else hash(self._query)
 

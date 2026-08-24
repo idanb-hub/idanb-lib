@@ -2,25 +2,25 @@ from __future__ import annotations
 
 import datetime
 import functools
-import typing
 from pathlib import Path
 
+import typing_extensions as T
 import humanize
 import ipymui
 import perspective
-import reacton
 import structlog
 from ipymui.components import mui
 
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
-    from perspective.widget import PerspectiveWidget
+from idanb import react
+
+if T.TYPE_CHECKING:
+    from idanb.ui.widgets import PerspectiveWidget
 
 
 _logger = structlog.get_logger()
 
 
-@reacton.component
+@react.component
 def FileBrowserListItem(  # noqa: N802
     path: Path,
     name: str | None = None,
@@ -52,13 +52,13 @@ def FileBrowserListItem(  # noqa: N802
         mui.ListItemText(primary=name, secondary=" | ".join(details))
 
 
-@reacton.component
+@react.component
 def FileBrowser(  # noqa: N802
     root: Path,
     on_dir: T.Callable[[Path], None] | None = None,
     on_file: T.Callable[[Path], None] | None = None,
 ) -> None:
-    path, set_path = reacton.use_state(root)
+    path, set_path = react.use_state(root)
     cwd = path if path.is_dir() else path.parent
 
     def on_path() -> None:
@@ -68,7 +68,7 @@ def FileBrowser(  # noqa: N802
         elif on_file is not None:
             on_file(path)
 
-    reacton.use_effect(on_path, [path])
+    react.use_effect(on_path, [path])
 
     with mui.Box():
         with (
@@ -137,7 +137,7 @@ _TABLE_FORMATS: dict[str, T.Callable[[perspective.View], str]] = {
 }
 
 
-@reacton.component
+@react.component
 def SaveTablePage(  # noqa: C901 N802 PLR0915
     widget: PerspectiveWidget,
     *,
@@ -148,24 +148,24 @@ def SaveTablePage(  # noqa: C901 N802 PLR0915
     # cannot be observed (it's a property, not a trait). Instead, we observe
     # `table_name`, which seems to be related.
     # https://github.com/finos/perspective/blob/v3.6.1/rust/perspective-python/perspective/widget/viewer/viewer.py
-    table_name, set_table_name = reacton.use_state(widget.table_name)
+    table_name, set_table_name = react.use_state(widget.table_name)
 
     def on_table_name() -> None:
         _logger.debug("table name changed", table_name=table_name)
 
-    reacton.use_effect(on_table_name, [table_name])
+    react.use_effect(on_table_name, [table_name])
 
     def on_widget() -> T.Callable[[], None]:
-        def on_change(change: dict[str, object]) -> None:
+        def on_change(change: dict[str, T.Any]) -> None:
             set_table_name(change["new"])
 
         widget.observe(on_change, "table_name")
         return lambda: widget.unobserve(on_change, "table_name")
 
-    reacton.use_effect(on_widget, [widget])
+    react.use_effect(on_widget, [widget])
 
     with mui.Box():
-        filedir, set_filedir = reacton.use_state(Path(savedir))
+        filedir, set_filedir = react.use_state(Path(savedir))
 
         FileBrowser(
             root=filedir,
@@ -173,16 +173,16 @@ def SaveTablePage(  # noqa: C901 N802 PLR0915
             on_dir=set_filedir,
         )
 
-        filename, set_filename = reacton.use_state(savename)
+        filename, set_filename = react.use_state(savename)
 
         def on_filename() -> None:
             fileext = Path(filename).suffix.removeprefix(".").upper()
             if fileext in _TABLE_FORMATS:
                 set_filefmt(fileext)
 
-        reacton.use_effect(on_filename, [filename])
+        react.use_effect(on_filename, [filename])
 
-        filefmt, set_filefmt = reacton.use_state(
+        filefmt, set_filefmt = react.use_state(
             next(iter(_TABLE_FORMATS.keys())),
         )
 
@@ -191,13 +191,13 @@ def SaveTablePage(  # noqa: C901 N802 PLR0915
             if fileext in _TABLE_FORMATS:
                 set_filefmt(fileext)
 
-        reacton.use_effect(on_filename, [filename])
+        react.use_effect(on_filename, [filename])
 
         def on_filefmt() -> None:
             fileext = filefmt.lower()
             set_filename(str(Path(filename).with_suffix(f".{fileext}")))
 
-        reacton.use_effect(on_filefmt, [filefmt])
+        react.use_effect(on_filefmt, [filefmt])
 
         with mui.Grid(container=True, spacing=1):
             with mui.Grid(size=8):
@@ -240,7 +240,7 @@ def SaveTablePage(  # noqa: C901 N802 PLR0915
                     fullWidth=True,
                 )
 
-            mode, set_mode = reacton.use_state(next(iter(_TABLE_VIEWS.keys())))
+            mode, set_mode = react.use_state(next(iter(_TABLE_VIEWS.keys())))
 
             with (
                 mui.Grid(size="auto"),

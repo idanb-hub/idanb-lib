@@ -1,12 +1,7 @@
 from __future__ import annotations
 
-import typing
-
+import typing_extensions as T
 import polars as pl
-
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
-
 
 # Maps SQL types to Python (either polars dtype or constructor function).
 DTYPES: dict[str, type[pl.DataType] | T.Callable[[T.Any], object]] = {

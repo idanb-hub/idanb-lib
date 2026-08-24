@@ -12,6 +12,7 @@ dependencies = [
     "perspective-python>=4.0.1",
     "polars[pyarrow]>=1.37.0",
     "pydantic>=2.12.5",
+    "pygit2>=1.18.2",
     "pyyaml>=6.0.3",
     "reacton>=1.9.1",
     "service-connectors-v2[intelowl,trino]",
@@ -23,14 +24,6 @@ dependencies = [
 dev = [
     "typing-extensions>=4.15.0",
 ]
-
-[tool.pyright]
-venv = ".venv"
-venvPath = "."
-# We're using `typing-extensions` for everything.
-deprecateTypingAliases = false
-# Doesn't work well with Reacton components.
-reportUnusedCallResult = false
 
 [[tool.uv.index]]
 name = "ipymui"

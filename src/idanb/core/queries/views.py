@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import textwrap
-import typing
+
+import typing_extensions as T
 
 from idanb import utils
-
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
-
 
 _VIEWS: dict[str, dict[str, str]] = {}
 

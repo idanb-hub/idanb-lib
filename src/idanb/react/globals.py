@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import uuid
 
-import reacton
 import typing_extensions as T
+import reacton
 
-
-class StateParams[Value](T.TypedDict, total=False):
-    key: str
-    eq: T.Callable[[Value, Value], bool]
+if T.TYPE_CHECKING:
+    from .state import StateParams
 
 
 class Global[Value]:
@@ -46,11 +44,13 @@ class Global[Value]:
         return value
 
 
-def create_global[Value](
-    value: Value,
-    **kwargs: T.Unpack[StateParams[Value]],
-) -> Global[Value]:
-    return Global(value, **kwargs)
+class create_global[Value]:  # noqa: N801
+    def __new__(
+        cls,
+        value: Value,
+        **kwargs: T.Unpack[StateParams[Value]],
+    ) -> Global[Value]:
+        return Global(value, **kwargs)
 
 
 def use_global[Value](

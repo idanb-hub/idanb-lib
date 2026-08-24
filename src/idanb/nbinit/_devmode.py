@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
-import typing
 
+import typing_extensions as T
 from IPython.core.getipython import get_ipython
 from IPython.extensions import autoreload
 from watchdog.events import FileSystemEventHandler
@@ -10,7 +10,7 @@ from watchdog.observers import Observer
 
 from idanb import meta, ui
 
-if typing.TYPE_CHECKING:
+if T.TYPE_CHECKING:
     from watchdog.events import DirModifiedEvent, FileModifiedEvent
 
 
@@ -43,7 +43,7 @@ def _enable_autoreload() -> None:
 
 
 class _ReloadWindowEventHandler(FileSystemEventHandler):
-    @typing.override
+    @T.override
     def on_modified(self, event: DirModifiedEvent | FileModifiedEvent) -> None:
         _logger.warning("Notebook file was modified. Reloading window...")
         ui.jsexec("window.location.reload()")

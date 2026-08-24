@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import dataclasses
-import typing
 
-if typing.TYPE_CHECKING:
+import typing_extensions as T
+
+if T.TYPE_CHECKING:
     import enum
 
     from _typeshed import DataclassInstance

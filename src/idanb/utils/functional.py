@@ -1,10 +1,29 @@
 from __future__ import annotations
 
 import functools
-import typing
 
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
+import typing_extensions as T
+
+
+@T.overload
+def void(*args: object) -> None: ...
+
+
+@T.overload
+def void[Result](*args: object, result: Result) -> Result: ...
+
+
+def void[Result](*args: object, result: Result = None) -> Result:  # noqa: ARG001
+    """Ignore `args` and return `result` (defaults to `None`).
+
+    Use this to fit multiple expressions into one lambda.
+
+    >>> f = lambda: void(print(1), print(2))
+    >>> f()
+    1
+    2
+    """
+    return result
 
 
 def then[ROuter, RInner, **PInner, **POuter](

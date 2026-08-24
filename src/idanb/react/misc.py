@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-import typing
-
+import typing_extensions as T
 import reacton
-
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
 
 
 def use_previous[Value](value: Value) -> Value:

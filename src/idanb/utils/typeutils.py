@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import typing
-
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
+import typing_extensions as T
 
 
 class copy_signature_from[R, **P]:  # noqa: N801
     """Decorator to copy type annotations from another function/method."""
 
-    @typing.overload
+    @T.overload
     def __init__[S](
         self,
         *,
@@ -21,7 +18,7 @@ class copy_signature_from[R, **P]:  # noqa: N801
         (meaning the `self` parameter is not copied).
         """
 
-    @typing.overload
+    @T.overload
     def __init__(self, function: T.Callable[P, R]) -> None:
         """Copy type annotations from another function."""
 
