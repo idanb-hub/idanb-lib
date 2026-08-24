@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import collections
-import typing
 
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
+import typing_extensions as T
 
 
 class TransformDict[K, V](collections.UserDict[K, V]):
@@ -22,19 +20,19 @@ class TransformDict[K, V](collections.UserDict[K, V]):
         self.transform = transform
         super().__init__(init, **kwargs)
 
-    @typing.override
+    @T.override
     def __getitem__(self, key: K) -> V:
         return super().__getitem__(self.transform(key))
 
-    @typing.override
+    @T.override
     def __setitem__(self, key: K, item: V) -> None:
         return super().__setitem__(self.transform(key), item)
 
-    @typing.override
+    @T.override
     def __delitem__(self, key: K) -> None:
         return super().__delitem__(self.transform(key))
 
-    @typing.override
+    @T.override
     def __contains__(self, key: object) -> bool:
         try:
             transformed = self.transform(key)  # pyright: ignore[reportArgumentType]
@@ -54,7 +52,7 @@ class CaselessDict[K, V](TransformDict[K, V]):
     ) -> None:
         def transform(key: K) -> K:
             if isinstance(key, str | bytes):
-                return typing.cast("K", key.lower())
+                return T.cast("K", key.lower())
             return key
 
         super().__init__(transform, init, **kwargs)

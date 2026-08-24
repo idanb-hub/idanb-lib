@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import enum
-import typing
 
+import typing_extensions as T
 import reacton
 
 from .globals import Global, create_global, use_global
-
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
 
 
 class _NoResultEnum(enum.Enum):
@@ -30,10 +27,10 @@ class TaskStatus:
     class Cancelled:
         pass
 
-    class Exception(typing.NamedTuple):  # noqa: A001
+    class Exception(T.NamedTuple):  # noqa: A001
         exception: BaseException
 
-    class Result[Type](typing.NamedTuple):
+    class Result[Type](T.NamedTuple):
         result: Type
 
 
@@ -67,6 +64,9 @@ class Task[**Params, Result](TaskStatus):
 
         self._future = future
         return future
+
+    def start(self, *args: Params.args, **kwargs: Params.kwargs) -> None:
+        _ = self(*args, **kwargs)
 
     def cancel(self) -> None:
         if self._future is None:
@@ -168,14 +168,14 @@ def task[Result, **Params]() -> T.Callable[
     return decorator
 
 
-@typing.overload
+@T.overload
 def use_task[Result, **Params]() -> T.Callable[
     [T.Callable[Params, T.Awaitable[Result]]],
     Task[Params, Result],
 ]: ...
 
 
-@typing.overload
+@T.overload
 def use_task[Result, **Params](
     task: GlobalTask[Params, Result],
 ) -> Task[Params, Result]: ...
@@ -197,7 +197,7 @@ def use_task[Result, **Params](
         func: T.Callable[Params, T.Awaitable[Result]],
     ) -> Task[Params, Result]:
         future, set_future = reacton.use_state(
-            typing.cast("None | asyncio.Future[Result]", None),
+            T.cast("None | asyncio.Future[Result]", None),
             # Always update, even when the new value equals the current one.
             eq=lambda _l, _r: False,
         )

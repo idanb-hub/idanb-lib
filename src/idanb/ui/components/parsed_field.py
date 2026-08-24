@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-import typing
-
+import typing_extensions as T
 import ipymui
-import reacton
 from ipymui.components import mui
 
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
-    from reacton.core import Element
+from idanb import react
 
 
-@reacton.component
+@react.component
 def ParsedField[Parsed](  # noqa: N802
     label: str,
     *,
@@ -20,13 +16,13 @@ def ParsedField[Parsed](  # noqa: N802
     parser: T.Callable[[str], Parsed],
     init_value: str | None = None,
     **kwargs: T.Unpack[ipymui.Props],
-) -> Element[T.Any]:
-    init_value = reacton.use_memo(
+) -> react.Element[T.Any]:
+    init_value = react.use_memo(
         lambda: init_value if init_value is not None else str(value),
         dependencies=[],
     )
 
-    error, set_error = reacton.use_state(typing.cast("Exception | None", None))
+    error, set_error = react.use_state[Exception | None](None)
 
     @ipymui.callback("$[0].target.value")
     def set_value(value: str) -> None:
@@ -38,7 +34,7 @@ def ParsedField[Parsed](  # noqa: N802
             on_value(parsed)
             set_error(None)
 
-    reacton.use_memo(lambda: set_value(init_value), dependencies=[])
+    react.use_memo(lambda: set_value(init_value), dependencies=[])
 
     return mui.TextField(
         label=label,

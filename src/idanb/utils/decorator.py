@@ -3,13 +3,11 @@ from __future__ import annotations
 import abc
 import functools
 import inspect
-import typing
+
+import typing_extensions as T
 
 from .asynctools import ReturnFromAsyncGenerator
 from .typeutils import copy_signature_from
-
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
 
 
 class UniversalDecorator(abc.ABC):
@@ -47,19 +45,19 @@ class UniversalDecorator(abc.ABC):
 
     # The order of overloads matters! First applicable one gets used.
 
-    @typing.overload
+    @T.overload
     @copy_signature_from(decorate_asyncgen)
     def __call__(self, func: T.Any) -> T.Any: ...
 
-    @typing.overload
+    @T.overload
     @copy_signature_from(decorate_gen)
     def __call__(self, func: T.Any) -> T.Any: ...
 
-    @typing.overload
+    @T.overload
     @copy_signature_from(decorate_async)
     def __call__(self, func: T.Any) -> T.Any: ...
 
-    @typing.overload
+    @T.overload
     @copy_signature_from(decorate_sync)
     def __call__(self, func: T.Any) -> T.Any: ...
 
@@ -146,7 +144,7 @@ class UniversalDecoratorBase[*Context](UniversalDecorator):
         """
         del context
 
-    @typing.override
+    @T.override
     def decorate_sync[R, **P](
         self,
         func: T.Callable[P, R],
@@ -170,7 +168,7 @@ class UniversalDecoratorBase[*Context](UniversalDecorator):
 
         return decorated
 
-    @typing.override
+    @T.override
     def decorate_gen[Y, S, R, **P](
         self,
         func: T.Callable[P, T.Generator[Y, S, R]],
@@ -196,7 +194,7 @@ class UniversalDecoratorBase[*Context](UniversalDecorator):
 
         return decorated
 
-    @typing.override
+    @T.override
     def decorate_async[R, **P](
         self,
         func: T.Callable[P, T.Awaitable[R]],
@@ -220,7 +218,7 @@ class UniversalDecoratorBase[*Context](UniversalDecorator):
 
         return decorated
 
-    @typing.override
+    @T.override
     def decorate_asyncgen[Y, S, **P](  # noqa: C901, PLR0915
         self,
         func: T.Callable[P, T.AsyncGenerator[Y, S]],
@@ -319,7 +317,7 @@ class _UniversalDecoratorFromGeneratorFunction[Y, S, R, **P](
     ) -> None:
         self._genfunc = genfunc
 
-    @typing.override
+    @T.override
     def _pre(
         self,
         args: list[T.Any],
@@ -333,7 +331,7 @@ class _UniversalDecoratorFromGeneratorFunction[Y, S, R, **P](
 
         return (gen,)
 
-    @typing.override
+    @T.override
     def _post(self, result: T.Any, gen: T.Generator[Y, S, R]) -> R:
         try:
             _ = gen.send(result)
@@ -343,7 +341,7 @@ class _UniversalDecoratorFromGeneratorFunction[Y, S, R, **P](
         errmsg = "generator didn't stop"
         raise RuntimeError(errmsg)
 
-    @typing.override
+    @T.override
     def _except(self, exc: BaseException, gen: T.Generator[Y, S, R]) -> T.Any:
         try:
             _ = gen.throw(exc)
@@ -356,7 +354,7 @@ class _UniversalDecoratorFromGeneratorFunction[Y, S, R, **P](
         errmsg = "generator didn't stop"
         raise RuntimeError(errmsg)
 
-    @typing.override
+    @T.override
     def _finally(self, gen: T.Generator[Y, S, R]) -> None:
         gen.close()
 

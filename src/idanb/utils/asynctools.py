@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
-import typing
+
+import typing_extensions as T
 
 from .typeutils import copy_signature_from
-
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
-
 
 _background_tasks: set[asyncio.Task[object]] = set()
 
@@ -62,7 +59,7 @@ class ContextProxy[Target]:
 
     _target: contextvars.ContextVar[Target]
 
-    if typing.TYPE_CHECKING:
+    if T.TYPE_CHECKING:
         # This makes `ContextProxy` appear transparent to type-checkers.
         def __new__(cls, target: Target) -> Target: ...
 
@@ -98,6 +95,6 @@ class ContextProxy[Target]:
     ) -> None:
         return __class__.target(instance).reset(token)
 
-    @typing.override
+    @T.override
     def __getattribute__(self, attr: str) -> T.Any:
         return getattr(type(self).get(self), attr)

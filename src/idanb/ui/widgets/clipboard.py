@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import typing
-
+import typing_extensions as T
 import anywidget
 import traitlets
 
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
 
-
-@typing.final
+@T.final
 class CopyToClipboard(anywidget.AnyWidget):
     """Copies `data` to clipboard when containing element is clicked.
 

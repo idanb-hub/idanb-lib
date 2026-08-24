@@ -4,15 +4,14 @@ import functools
 import http.server
 import logging
 import threading
-import typing
 from pathlib import Path
 
-from idanb.utils.config import CONFIG
+import typing_extensions as T
 
-if typing.TYPE_CHECKING:
+from .config import CONFIG
+
+if T.TYPE_CHECKING:
     import io
-
-    import typing_extensions as T
 
 
 _logger = logging.getLogger(__name__)
@@ -36,14 +35,14 @@ class AssetRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     # Allow cross-origin requests.
 
-    @typing.override
+    @T.override
     def end_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
         return super().end_headers()
 
     # Restrict what files are being served.
 
-    @typing.override
+    @T.override
     def send_head(self) -> io.BytesIO | T.BinaryIO | None:
         path = Path(self.translate_path(self.path))
         if path.is_dir() or path.suffix not in ALLOWED_FILE_EXTENSIONS:
@@ -54,7 +53,7 @@ class AssetRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     # Don't log to stdout.
 
-    @typing.override
+    @T.override
     def log_message(self, format: str, *args: object) -> None:
         _logger.info(format, *args)
 

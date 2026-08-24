@@ -1,245 +1,264 @@
-function init() {
-    if (window._perspective_hooks_initialized)
+/** @import { AnyWidget } from "@anywidget/types" */
+/** @import { HTMLPerspectiveViewerElement, HTMLPerspectiveViewerPluginElement } from "@finos/perspective-viewer" */
+/** @import { RegularTableElement } from "regular-table" */
+/** @import * as perspective_viewer from "@finos/perspective-viewer/dist/wasm/perspective-viewer.d.ts" */
+
+/**
+ * @typedef {import("@finos/perspective-viewer-datagrid").HTMLPerspectiveViewerDatagridPluginElement & { regular_table: RegularTableElement } } HTMLPerspectiveViewerDatagridPluginElement
+ */
+
+/**
+ * @typedef Traits
+ * @property {string} table_name
+ * @property {Record<string, string>} config
+ * @property {Record<string, string>} styles
+ * @property {{[colname: string]: string}} templates
+ */
+
+/**
+ * @returns {Promise<perspective_viewer>}
+ */
+async function get_psp_wasm_module() {
+  await customElements.whenDefined("perspective-viewer");
+  const elem = customElements.get("perspective-viewer");
+  // @ts-expect-error: `__wasm_module` is not declared anywhere.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+  return elem.__wasm_module__;
+}
+
+/**
+ * Create and return `<perspective-viewer>` inside parent element.
+ * @param {HTMLElement} parent
+ * @returns {HTMLPerspectiveViewerElement}
+ */
+function createViewer(parent) {
+  const viewer = document.createElement("perspective-viewer");
+  viewer.style.height = "100%";
+  viewer.style.minHeight = "200px";
+
+  parent.style.border = "1px solid black";
+  parent.style.resize = "vertical";
+  // Small initial height, user can resize.
+  parent.style.height = "200px";
+  parent.replaceChildren(viewer);
+
+  return viewer;
+}
+
+/**
+ * Apply custom CSS styles to viewer's plugins.
+ * @param {HTMLPerspectiveViewerElement} viewer
+ * @param {Traits["styles"]} styles
+ */
+function applyStyles(viewer, styles) {
+  for (const [name, style] of Object.entries(styles)) {
+    /** @type {HTMLPerspectiveViewerPluginElement | null} */
+    let plugin = null;
+
+    try {
+      plugin = viewer.getPlugin(name);
+    } catch {} // eslint-disable-line no-empty
+
+    if (plugin == null) {
+      console.warn("Cannot apply custom style for '%s' plugin.");
+      continue;
+    }
+
+    const sheet = new CSSStyleSheet();
+    if (plugin.shadowRoot != null) {
+      sheet.replaceSync(style);
+      plugin.shadowRoot.adoptedStyleSheets.push(sheet);
+    } else {
+      // Add sheet globally, but scope its rules to the `plugin` element.
+      sheet.replaceSync(`@scope (${plugin.tagName}) { ${style} }`);
+      document.adoptedStyleSheets.push(sheet);
+    }
+  }
+}
+
+/**
+ * Allow selecting text inside datagrid table.
+ * @param {HTMLPerspectiveViewerDatagridPluginElement} datagrid
+ */
+function makeTableDataSelectable(datagrid) {
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(`
+        td {
+            user-select: text !important;
+        }
+    `);
+  datagrid.shadowRoot?.adoptedStyleSheets.push(sheet);
+
+  // Select entire cell contents on double click.
+  datagrid.regular_table.addEventListener("mousedown", (e) => {
+    if (e.detail !== 2) {
+      // Not double click.
+      return;
+    }
+
+    if (!(e.target instanceof Node)) {
+      return;
+    }
+
+    const selection = window.getSelection();
+    if (selection === null) {
+      return;
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(e.target);
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    e.preventDefault();
+  });
+}
+
+/**
+ * Apply data rendering templates to `<regular-table>`.
+ * @param {RegularTableElement} table
+ * @param {Traits["templates"]} templates
+ */
+function applyTemplates(table, templates) {
+  const renderers = Object.fromEntries(
+    // prettier-ignore
+    Object.entries(templates).map(([key, value]) => [
+      key,
+      /** @type {((value: unknown) => string) | undefined} */
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      (new Function("$", `return \`${value}\``)),
+    ]),
+  );
+
+  table.addStyleListener(() => {
+    for (const td of table.querySelectorAll("td")) {
+      const meta = table.getMeta(td);
+      if (meta?.type !== "body") {
+        continue;
+      }
+
+      const [column] = meta.column_header;
+      if (typeof column !== "string") {
+        continue;
+      }
+
+      // Can be target of attribute selectors in CSS.
+      td.dataset.column = column;
+
+      const render = renderers[column];
+      if (render !== undefined) {
+        td.innerHTML = render(meta.value);
+        td.title = td.innerText;
+      } else {
+        td.title = meta.value?.toString() ?? "";
+      }
+    }
+  });
+}
+
+/** @type { AnyWidget<Traits> } */
+export default {
+  async render({ model, el }) {
+    const viewer = createViewer(el);
+
+    applyStyles(viewer, model.get("styles"));
+
+    /** @type {HTMLPerspectiveViewerDatagridPluginElement} */
+    const datagrid = viewer.getPlugin("datagrid");
+    makeTableDataSelectable(datagrid);
+    applyTemplates(datagrid.regular_table, model.get("templates"));
+
+    const { Client } = await get_psp_wasm_module();
+    const client = new Client(
+      /** @param {Uint8Array} msg */
+      // eslint-disable-next-line @typescript-eslint/require-await
+      async (msg) => {
+        const buffer = msg.slice().buffer;
+        model.send({ type: "binary_msg" }, undefined, [buffer]);
+      },
+    );
+
+    model.on(
+      "msg:custom",
+      /**
+       * @param {Record<string, unknown>} content
+       * @param {DataView[]} buffers
+       */
+      (content, buffers) => {
+        // console.log("custom msg", content, buffers);
+        switch (content.type) {
+          case "binary_msg": {
+            const [msg] = buffers;
+            void client.handle_response(msg.buffer);
+            break;
+          }
+          default: {
+            console.warn("unknown message", content, buffers);
+            break;
+          }
+        }
+      },
+    );
+
+    /** @type {string[]} */
+    const names = [];
+    let loading = false;
+    /** @type {perspective_viewer.Table | null} */
+    let table = null;
+
+    function pushTableName() {
+      names.push(model.get("table_name"));
+      void loadTable();
+    }
+
+    async function loadTable() {
+      if (loading) {
         return;
+      }
 
-    window._perspective_hooks_initialized = true;
-    hookPerspectiveDatagrid();
-    makePerspectiveShowCustomToolbar();
-}
+      loading = true;
 
-const tableStyleSheet = new CSSStyleSheet();
-tableStyleSheet.replaceSync(`
-    td {
-        user-select: text !important;
-    }
-`);
+      while (names.length > 0) {
+        const name = names.pop();
 
-function hookPerspectiveDatagrid() {
-    // https://github.com/finos/perspective/blob/master/packages/perspective-viewer-datagrid/src/js/custom_elements/datagrid.js
-    const Datagrid = customElements.get("perspective-viewer-datagrid");
-    const activate = Datagrid.prototype.activate
-    Datagrid.prototype.activate = async function(view) {
-        const initialized = this._initialized;
-
-        await activate.call(this, view);
-
-        if (!initialized) {
-            makeRegularTableRenderHTML(this.regular_table);
-
-            this.shadowRoot.adoptedStyleSheets.push(tableStyleSheet);
+        if (table !== null) {
+          try {
+            await viewer.eject();
+            await table.delete({ lazy: true });
+          } catch (e) {
+            console.error(e);
+          }
+          table = null;
         }
-    }
-}
 
-// Make regular-table (used by the datagrid plugin) render HTML markup.
-function makeRegularTableRenderHTML(regularTable) {
-    // https://github.com/finos/regular-table/blob/v0.6.8/README.md#addstylelistener-and-getmeta-styling
-    regularTable.addStyleListener(() => {
-        for (const td of regularTable.querySelectorAll("td")) {
-            // Don't convert when there's some HTML already.
-            if (td.children.length > 0)
-                continue;
-            td.innerHTML = td.textContent;
+        if (name) {
+          try {
+            table = await client.open_table(name);
+            await viewer.load(table);
+            await viewer.restore(model.get("config"));
+          } catch (e) {
+            console.error(e);
+          }
         }
-    });
-}
+      }
 
-// Add custom toolbar into all registered perspective plugins.
-function makePerspectiveShowCustomToolbar() {
-    for (const plugin of document.createElement("perspective-viewer").getAllPlugins()) {
-        // This seemed like the best method to hook. See:
-        //   https://github.com/finos/perspective/blob/master/rust/perspective-viewer/src/rust/js/plugin.rs
-        // NOTE: Custom element callbacks can't be hooked.
-        const restore = plugin.__proto__.restore;
-        plugin.__proto__.restore = function(...params) {
-            const viewer = this.parentElement;
-            if (viewer) {
-                addCustomPluginSettings(viewer);
-            }
-            return restore.call(this, ...params);
-        }
-    }
-}
-
-function getPluginSettings(viewer) {
-    // Plugins can add their settings to their parent perspective-viewer's
-    // toolbar through its "plugin-settings" slot. Not all do, so we create
-    // a new element when the slot isn't filled.
-
-    const existing = viewer.querySelector("[slot='plugin-settings']");
-    if (existing)
-        return existing;
-
-    const settings = document.createElement("div");
-    settings.setAttribute("slot", "plugin-settings");
-    viewer.appendChild(settings);
-    return settings;
-}
-
-function addCustomPluginSettings(viewer) {
-    const settings = getPluginSettings(viewer);
-    const root = settings.shadowRoot || settings;
-
-    // Not using `.getElementById` because root can be an arbitrary Element.
-    if (root.querySelector("#customPluginSettings"))
-        return;
-
-    const custom = document.createElement("div");
-    custom.id = "customPluginSettings";
-    const shadow = custom.attachShadow({ mode: "open" });
-
-    shadow.adoptedStyleSheets.push(customSettingsStyleSheet);
-    shadow.innerHTML = `
-        <div id="toolbar">
-            <span class="hover-target">
-                <span id="maximize" class="button">
-                    <span></span>
-                </span>
-            </span>
-        </div>
-    `;
-
-    const maximize = shadow.getElementById("maximize");
-    maximize.addEventListener("click", (e) => {
-        // NOTE: Fullscreen breaks popups.
-        viewer.classList.toggle("maximized");
-        maximize.classList.toggle("revert");
-    });
-
-    root.prepend(custom);
-}
-
-const customSettingsStyleSheet = new CSSStyleSheet();
-customSettingsStyleSheet.replaceSync(`
-    /* https://github.com/finos/perspective/blob/master/packages/perspective-viewer-datagrid/src/less/toolbar.less */
-
-    :host {
-        position: relative;
-        display: block;
+      loading = false;
     }
 
-    :host #container {
-        position: absolute;
-        display: flex;
-        flex-direction: column;
-        justify-content: stretch;
-        align-items: stretch;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
+    model.on("change:table_name", pushTableName);
+    pushTableName();
+
+    function updateConfig() {
+      void viewer.restore(model.get("config"));
     }
+    model.on("change:config", updateConfig);
 
-    :host #toolbar {
-        display: flex;
-        align-items: center;
-        height: 36px;
-    }
+    return async () => {
+      model.off("change:table_name", pushTableName);
+      model.off("change:config", updateConfig);
 
-    :host #toolbar .hover-target {
-        margin: 0;
-        display: inline-flex;
-        align-items: center;
-        height: 48px;
-        cursor: pointer;
-
-        &:hover {
-            outline: 4px solid var(--icon--color);
-            background-color: var(--icon--color);
-        }
-    }
-
-    .button:before {
-        width: 21px;
-        height: 21px;
-        content: "";
-        -webkit-mask-size: cover;
-        mask-size: cover;
-        background-color: var(--icon--color);
-    }
-
-    .button.editable:before,
-    .button.lock-scroll:before {
-        color: inherit;
-    }
-
-    .button {
-        display: inline-flex;
-        justify-content: center;
-        align-items: center;
-        user-select: none;
-        padding: 0 5px;
-        border: 1px solid transparent;
-        border-radius: 3px;
-        border: 1px solid transparent;
-        box-sizing: border-box;
-        display: inline-flex;
-        font-size: var(--label--font-size, 0.75em);
-        height: 22px;
-        user-select: none;
-        white-space: nowrap;
-        width: 37px;
-    }
-
-    .button > span {
-        display: none;
-        margin: 0;
-        padding: 0;
-    }
-
-    .hover-target:hover .button {
-        position: relative;
-        background-color: var(--icon--color);
-        color: var(--plugin--background);
-        opacity: 1;
-        display: flex;
-        align-items: center;
-        cursor: pointer;
-    }
-
-    .hover-target:hover .button:before {
-        background-color: var(--plugin--background);
-    }
-
-    .hover-target:hover .button > span {
-        display: block;
-        position: absolute;
-        top: calc(100% + 3px);
-        left: 50%;
-        translate: -50%;
-        margin: 0;
-        padding: 5px;
-        height: auto;
-        white-space: pre-wrap;
-        line-height: 1;
-        font-size: 9px;
-        background-color: var(--icon--color);
-        width: 35px;
-        text-align: center;
-        border-radius: 0 0 3px 3px;
-    }
-
-    #maximize:before {
-        /* https://fontawesome.com/icons/expand?f=classic&s=solid */
-        mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NDggNTEyIj48IS0tIUZvbnQgQXdlc29tZSBGcmVlIDYuNy4yIGJ5IEBmb250YXdlc29tZSAtIGh0dHBzOi8vZm9udGF3ZXNvbWUuY29tIExpY2Vuc2UgLSBodHRwczovL2ZvbnRhd2Vzb21lLmNvbS9saWNlbnNlL2ZyZWUgQ29weXJpZ2h0IDIwMjUgRm9udGljb25zLCBJbmMuLS0+PHBhdGggZD0iTTMyIDMyQzE0LjMgMzIgMCA0Ni4zIDAgNjRsMCA5NmMwIDE3LjcgMTQuMyAzMiAzMiAzMnMzMi0xNC4zIDMyLTMybDAtNjQgNjQgMGMxNy43IDAgMzItMTQuMyAzMi0zMnMtMTQuMy0zMi0zMi0zMkwzMiAzMnpNNjQgMzUyYzAtMTcuNy0xNC4zLTMyLTMyLTMycy0zMiAxNC4zLTMyIDMybDAgOTZjMCAxNy43IDE0LjMgMzIgMzIgMzJsOTYgMGMxNy43IDAgMzItMTQuMyAzMi0zMnMtMTQuMy0zMi0zMi0zMmwtNjQgMCAwLTY0ek0zMjAgMzJjLTE3LjcgMC0zMiAxNC4zLTMyIDMyczE0LjMgMzIgMzIgMzJsNjQgMCAwIDY0YzAgMTcuNyAxNC4zIDMyIDMyIDMyczMyLTE0LjMgMzItMzJsMC05NmMwLTE3LjctMTQuMy0zMi0zMi0zMmwtOTYgMHpNNDQ4IDM1MmMwLTE3LjctMTQuMy0zMi0zMi0zMnMtMzIgMTQuMy0zMiAzMmwwIDY0LTY0IDBjLTE3LjcgMC0zMiAxNC4zLTMyIDMyczE0LjMgMzIgMzIgMzJsOTYgMGMxNy43IDAgMzItMTQuMyAzMi0zMmwwLTk2eiIvPjwvc3ZnPg==");
-        mask-position: center;
-        mask-size: 50%;
-        mask-repeat: no-repeat;
-    }
-
-    #maximize.revert:before {
-        /* https://fontawesome.com/icons/compress?f=classic&s=solid */
-        mask-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NDggNTEyIj48IS0tIUZvbnQgQXdlc29tZSBGcmVlIDYuNy4yIGJ5IEBmb250YXdlc29tZSAtIGh0dHBzOi8vZm9udGF3ZXNvbWUuY29tIExpY2Vuc2UgLSBodHRwczovL2ZvbnRhd2Vzb21lLmNvbS9saWNlbnNlL2ZyZWUgQ29weXJpZ2h0IDIwMjUgRm9udGljb25zLCBJbmMuLS0+PHBhdGggZD0iTTE2MCA2NGMwLTE3LjctMTQuMy0zMi0zMi0zMnMtMzIgMTQuMy0zMiAzMmwwIDY0LTY0IDBjLTE3LjcgMC0zMiAxNC4zLTMyIDMyczE0LjMgMzIgMzIgMzJsOTYgMGMxNy43IDAgMzItMTQuMyAzMi0zMmwwLTk2ek0zMiAzMjBjLTE3LjcgMC0zMiAxNC4zLTMyIDMyczE0LjMgMzIgMzIgMzJsNjQgMCAwIDY0YzAgMTcuNyAxNC4zIDMyIDMyIDMyczMyLTE0LjMgMzItMzJsMC05NmMwLTE3LjctMTQuMy0zMi0zMi0zMmwtOTYgMHpNMzUyIDY0YzAtMTcuNy0xNC4zLTMyLTMyLTMycy0zMiAxNC4zLTMyIDMybDAgOTZjMCAxNy43IDE0LjMgMzIgMzIgMzJsOTYgMGMxNy43IDAgMzItMTQuMyAzMi0zMnMtMTQuMy0zMi0zMi0zMmwtNjQgMCAwLTY0ek0zMjAgMzIwYy0xNy43IDAtMzIgMTQuMy0zMiAzMmwwIDk2YzAgMTcuNyAxNC4zIDMyIDMyIDMyczMyLTE0LjMgMzItMzJsMC02NCA2NCAwYzE3LjcgMCAzMi0xNC4zIDMyLTMycy0xNC4zLTMyLTMyLTMybC05NiAweiIvPjwvc3ZnPgo=");
-    }
-
-    #maximize span:before {
-        content: "Expand";
-    }
-
-    #maximize.revert span:before {
-        content: "Collapse";
-        font-size: 0.85em;
-    }
-`)
-
-init()
+      await viewer.delete();
+      await table?.delete();
+    };
+  },
+};

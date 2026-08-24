@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import itertools
-import typing
+
+import typing_extensions as T
 
 from analytics.connectors.trino import TrinoConnector
-from idanb.utils.config import CONFIG
+from idanb import meta
+from idanb.core.cache import fs_cache
 
 from .config import Catalog, DataPlatformConfig, Host
 from .tables import rows_to_polars
 
-if typing.TYPE_CHECKING:
+if T.TYPE_CHECKING:
     import polars as pl
-    import typing_extensions as T
 
     from analytics.connectors.trino import TrinoQuery
 
@@ -48,7 +49,7 @@ class DataPlatform:
 
     def __init__(self, config: DataPlatformConfig | None = None) -> None:
         if config is None:
-            config = CONFIG[DataPlatformConfig]
+            config = meta.CONFIG[DataPlatformConfig]
 
         self.connectors = {
             matrix: TrinoConnector(config.select(*matrix))
@@ -63,30 +64,39 @@ class DataPlatform:
         catalog: Catalog = Catalog.FLOWS,
         on_progress: T.Callable[[QueryProgress], None] | None = None,
     ) -> pl.DataFrame:
-        connector = self.connectors[host, catalog]
-        pages: list[list[list[object]]] = []
-
         if on_progress is None:
             on_progress = lambda _: None  # noqa: E731
 
-        async with connector.execute(query, *params) as results:
-            on_progress(QueryProgress(results))
-            async for page in results.pages():
+        @fs_cache()
+        async def do(
+            query: str,
+            params: tuple[object, ...],
+            host: Host,
+            catalog: Catalog,
+        ) -> pl.DataFrame:
+            connector = self.connectors[host, catalog]
+            pages: list[list[list[object]]] = []
+
+            async with connector.execute(query, *params) as results:
                 on_progress(QueryProgress(results))
-                if not page:
-                    continue
-                pages.append(page)
+                async for page in results.pages():
+                    on_progress(QueryProgress(results))
+                    if not page:
+                        continue
+                    pages.append(page)
 
-        types: dict[str, str] = {}
-        for col in await results.schema():
-            # For some reason, `type_code` holds the type name (string),
-            # even though it's annotated as an int.
-            if not isinstance(col.type_code, str):
-                errmsg = "this used to be string (when it shouldn't)"
-                raise TypeError(errmsg)
-            types[col.name] = col.type_code.lower()
+            types: dict[str, str] = {}
+            for col in await results.schema():
+                # For some reason, `type_code` holds the type name (string),
+                # even though it's annotated as an int.
+                if not isinstance(col.type_code, str):
+                    errmsg = "this used to be string (when it shouldn't)"
+                    raise TypeError(errmsg)
+                types[col.name] = col.type_code.lower()
 
-        return rows_to_polars(
-            itertools.chain.from_iterable(pages),
-            types,
-        )
+            return rows_to_polars(
+                itertools.chain.from_iterable(pages),
+                types,
+            )
+
+        return await do(query, params, host, catalog)

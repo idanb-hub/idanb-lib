@@ -1,33 +1,21 @@
-"""Global configuration.
-
-```py
-from idanb.core.config import CONFIG
-
-@CONFIG.register("foo")
-@dataclasses.dataclass()
-class FooConfig:
-    bar: str      # required
-    baz: int = 1  # optional
-
-# Then anywhere else ...
-fooconf = CONFIG[FooConfig]
-print(fooconf.bar)
-```
-"""
-
 from __future__ import annotations
 
-import collections.abc
-import typing
+import abc
+import builtins
+import dataclasses
+import types
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-import yaml
+import typing_extensions as T
 
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
+from ._typings import is_mapping, is_sequence
+
+if T.TYPE_CHECKING:
+    from _typeshed import SupportsGetItem
 
 
-class ConfigError(ValueError):
+class ConfigError(RuntimeError):
     message: str
     path: tuple[str | int, ...]
 
@@ -35,214 +23,284 @@ class ConfigError(ValueError):
         self,
         message: str,
         path: tuple[str | int, ...],
-        *args: object,
     ) -> None:
-        super().__init__(message, path, *args)
         self.message = message
         self.path = path
+        super().__init__(message, path)
 
-    @typing.override
+    @T.override
     def __str__(self) -> str:
-        path = (
-            "".join(
-                f".{key}" if isinstance(key, str) else f"[{key!r}]"
-                for key in self.path
-            )
-            or "<ROOT>"
+        path = "".join(
+            f".{p}" if isinstance(p, str) and p.isidentifier() else f"[{p!r}]"
+            for p in self.path
         )
-        return f"{self.message} at {path}"
+        return f"{self.message} (at {path or '.'})"
 
 
-class Config:
-    """Configuration manager that tracks and creates configuration classes.
+class ConfigTypeError(ConfigError):
+    def __init__(
+        self,
+        expected: type,
+        actual: type,
+        path: tuple[str | int, ...],
+    ) -> None:
+        message = f"expected {expected.__name__}, found {actual.__name__}"
+        super().__init__(message, path)
 
-    Allows modules to register their configuration classes. Once the managed
-    configuration is set, acts as a mapping from registered types to their
-    configured instances.
-    """
 
-    _data: object
-    _prefixes: dict[type, tuple[str | int, ...]]
-    _cache: dict[type, object]
+NO_DEFAULT = T.Sentinel("NO_DEFAULT")
 
-    def __init__(self) -> None:
-        self._data = None
-        self._prefixes = {}
-        self._cache = {}
 
-    def configure(self, data: object) -> None:
-        """Set the managed configuration.
+class Config[Data]:
+    _data: Data
+    _paths: dict[type, tuple[str | int, ...]]
+    _cache: dict[type, T.Any]
+    _reload: T.Callable[[], Data | None] | None
 
-        For example, data loaded with `json.load`.
+    def __init__(
+        self,
+        data: Data,
+        *,
+        reload: T.Callable[[], Data | None] | None = None,
+    ) -> None:
+        """Create a new `Config` instance from `data`.
+
+        If `reload` is not `None`, it is called whenever data is accessed
+        and can return new data to use instead (or `None` to keep current data).
         """
         self._data = data
+        self._paths = {}
+        self._cache = {}
+        self._reload = reload
+
+    @property
+    def data(self) -> Data:
+        _ = self.reload()
+        return self._data
+
+    @data.setter
+    def data(self, value: Data) -> None:
+        self._data = value
         self._cache.clear()
 
-    @typing.overload
-    def __getitem__(self, path: str | int | tuple[str | int, ...]) -> object:
-        """Return a value from the managed configuration.
+    def reload(self) -> bool:
+        if self._reload is None:
+            return False
 
-        Raises:
-            ConfigError: No such value exists.
-        """
+        data = self._reload()
+        if data is None:
+            return False
 
-    @typing.overload
-    def __getitem__[Cls](self, cls: type[Cls]) -> Cls:
-        """Return a class instance created from the managed configuration.
+        self.data = data
+        return True
 
-        The class type must have been previously registered with `register`.
+    def register[Cls: type](self, *path: str | int) -> T.Callable[[Cls], Cls]:
 
-        Raises:
-            ConfigError: Configuration is invalid.
-            TypeError: Requested class has not been previously registered.
-        """
+        def decorator(cls: Cls) -> Cls:
+            self._paths[cls] = path
+            return cls
 
-    @typing.no_type_check
-    def __getitem__(self, cls_or_path):
+        return decorator
+
+    @T.overload
+    def __getitem__[Cls](self, cls: type[Cls], /) -> Cls: ...
+
+    @T.overload
+    def __getitem__(
+        self,
+        path: str | int | tuple[str | int, ...],
+        /,
+    ) -> object: ...
+
+    def __getitem__[Cls](
+        self,
+        cls_or_path: type[Cls] | str | int | tuple[str | int, ...],
+    ) -> object:
         if isinstance(cls_or_path, type):
-            return self._getinstance(cls_or_path)
-        if isinstance(cls_or_path, tuple):
-            return self._getvalue(*cls_or_path)
-        return self._getvalue(cls_or_path)
+            cls = cls_or_path
+            return self._getinstance(cls, reload=True)
 
-    def get[Default](
+        path = cls_or_path
+        if not isinstance(path, tuple):
+            path = (path,)
+        return self._getvalue(*path, reload=True)
+
+    @T.overload
+    def get[Type](
         self,
         *path: str | int,
-        default: Default = None,
-    ) -> object | Default:
-        """Return a value from the managed configuration if it exists.
+        type: type[Type] = object,
+    ) -> Type: ...
 
-        Args:
-            path: Path to the desired value.
-            default: Value to return if `path` does not exist.
+    @T.overload
+    def get[Type, Default](
+        self,
+        *path: str | int,
+        default: Default,
+        type: type[Type] = object,
+    ) -> Type | Default: ...
+
+    def get[Type, Default](
+        self,
+        *path: str | int,
+        type: type[Type] = object,  # noqa: A002
+        default: Default = NO_DEFAULT,
+    ) -> Type | Default:
+        """Get value at specified `path`.
+
+        >>> c = Config([0, {"key": "v"}])
+        >>> c.get(0)
+        0
+        >>> c.get(1, "key")
+        'v'
+        >>> c.get(1, type=dict[str, int])
+        {'key': 'v'}
+        >>> c.get("key", default="missing")
+        'missing'
+
+        >>> c.get("key")
+        Traceback (most recent call last):
+        ...
+        idanb.utils.config.ConfigTypeError: expected Mapping, found list (at .)
+
+        >>> c.get(1, "key", type=int)
+        Traceback (most recent call last):
+        ...
+        idanb.utils.config.ConfigTypeError: expected int, found str (at [1].key)
+
+        >>> c.get(0, type=str, default="missing")
+        Traceback (most recent call last):
+        ...
+        idanb.utils.config.ConfigTypeError: expected str, found int (at [0])
+
         """
+        typ = type
+
         try:
-            return self._getvalue(*path)
+            value = self._getvalue(*path, reload=True)
         except ConfigError:
+            if default is NO_DEFAULT:
+                raise
             return default
 
-    def _getvalue(self, *path: str | int) -> object:
+        if isinstance(typ, types.GenericAlias):
+            typ = typ.__origin__
+        typ = T.cast("type[Type]", typ)
+
+        if isinstance(value, typ):
+            return value
+
+        if dataclasses.is_dataclass(typ):
+            return self._makeinstance(typ, value, path)
+
+        # Coerce `int` to `float`.
+        if typ is float and isinstance(value, str):
+            return T.cast("Type", float(value))
+
+        raise ConfigTypeError(typ, builtins.type(value), path)
+
+    def _getvalue(self, *path: str | int, reload: bool) -> object:
+        if reload:
+            _ = self.reload()
+
         value = self._data
-        for i, key in enumerate(path, start=0):
-            # Ensure current value is indexable.
-            if isinstance(value, collections.abc.Mapping):
-                pass
-            elif not isinstance(value, collections.abc.Sequence):
-                errmsg = f"expected list or map, found {type(value).__name__}"
-                raise ConfigError(errmsg, path[:i])
-            elif not isinstance(key, int):
-                errmsg = "expected map, found list"
-                raise ConfigError(errmsg, path[:i])
+        for i, key in enumerate(path):
+            if isinstance(key, str):
+                if not is_mapping(value):
+                    raise ConfigTypeError(Mapping, type(value), path[:i])
+            else:
+                _ = T.assert_type(key, int)
+                if isinstance(value, str | bytes) or not is_sequence(value):
+                    raise ConfigTypeError(Sequence, type(value), path[:i])
 
             try:
-                value = value[typing.cast("T.Any", key)]
+                # Checks above made sure that `value` is indexable with `key`.
+                value = T.cast("SupportsGetItem[str | int, object]", value)
+                value = value[key]
             except LookupError as e:
                 errmsg = "missing value"
                 raise ConfigError(errmsg, path[: i + 1]) from e
 
         return value
 
-    def _getinstance[Cls](self, cls: type[Cls]) -> Cls:
-        cached = self._cache.get(cls)
-        if cached is not None:
-            return typing.cast("Cls", cached)
+    def _makeinstance[Cls](
+        self,
+        cls: type[Cls],
+        data: object,
+        path: tuple[str | int, ...],
+    ) -> Cls:
+        if not is_mapping(data, keys=str):
+            raise ConfigTypeError(Mapping, type(data), path)
 
-        prefix = self._prefixes.get(cls)
-        if prefix is None:
-            errmsg = f"type {cls.__qualname__} is not stored in this config"
-            raise TypeError(errmsg)
-
-        config = self._getvalue(*prefix)
-        if not isinstance(config, collections.abc.Mapping):
-            errmsg = f"expected map, found {type(config).__name__!r}"
-            raise ConfigError(errmsg, prefix)
         try:
-            instance = cls(**config)
-        except (AssertionError, TypeError, ValueError) as e:
+            instance = cls(**data)
+        except (TypeError, ValueError, AssertionError) as e:
             errmsg = f"invalid config for {cls.__name__!r}"
-            raise ConfigError(errmsg, prefix) from e
+            raise ConfigError(errmsg, path) from e
 
         self._cache[cls] = instance
         return instance
 
-    def register[Cls](
-        self,
-        *prefix: str | int,
-    ) -> T.Callable[[type[Cls]], type[Cls]]:
-        """Create a decorator for registering configuration classes.
+    def _getinstance[Cls](self, cls: type[Cls], *, reload: bool) -> Cls:
+        if reload:
+            _ = self.reload()
 
-        Args:
-            prefix: Path to the class' data within the managed configuration.
+        cached: Cls | None = self._cache.get(cls)
+        if cached is not None:
+            return cached
 
-        Returns:
-            Decorator that registers the class it is applied on.
+        path = self._paths.get(cls)
+        if path is None:
+            errmsg = f"{cls.__qualname__!r} was not registered"
+            raise TypeError(errmsg)
 
-        The registered class gets constructed with `cls(**self[*prefix])`.
-        """
-
-        def decorator(cls: type[Cls]) -> type[Cls]:
-            self._prefixes[cls] = prefix
-            return cls
-
-        return decorator
+        data = self._getvalue(*path, reload=False)
+        instance = self._makeinstance(cls, data, path)
+        self._cache[cls] = instance
+        return instance
 
 
-def find_config(filename: str | Path, start: str | Path = ".") -> Path:
-    """Find `filename` in `start` or one of its parent directories.
+class ConfigLoader[Data](abc.ABC):
+    """Loads config from file and refreshes it whenever the file changes."""
 
-    Raises:
-        FileNotFoundError: Search stopped at either filesystem or project root
-            (directory containing `pyproject.toml`).
-    """
-    directories: list[Path] = []
-    reason = "stopped at filesystem root"
+    _path: Path
+    _timestamp: int
 
-    for parent in Path(start).absolute().parents:
-        path = parent.joinpath(filename)
-        if path.is_file():
-            return path
-        directories.append(parent)
-        if parent.joinpath("pyproject.toml").is_file():
-            reason = "stopped at project root (found pyproject.toml)"
-            break
+    def __init__(self, path: str | Path) -> None:
+        self._path = Path(path)
+        self._timestamp = -1
 
-    exc = FileNotFoundError(f"configuration file {str(filename)!r} not found")
-    exc.add_note("the following directories were searched:")
-    for directory in directories:
-        exc.add_note(f"  {directory}")
-    exc.add_note(reason)
-    raise exc
+    @abc.abstractmethod
+    def load(self, path: Path) -> Data: ...
 
+    def get(self) -> Config[Data]:
+        return Config(self._load(), reload=self._refresh)
 
-DEFAULT_CONFIG = "config.yaml"
+    def _load(self, mtime: int = -1) -> Data:
+        if mtime < 0:
+            mtime = self._path.stat().st_mtime_ns
 
-# Expose a single global config instance.
-CONFIG: Config
+        self._timestamp = mtime
+        return self.load(self._path)
+
+    def _refresh(self) -> Data | None:
+        mtime = self._path.stat().st_mtime_ns
+        return None if mtime == self._timestamp else self._load(mtime)
 
 
-def configure(file: str | Path = DEFAULT_CONFIG) -> Config:
-    """Load the global configuration from a specified YAML file.
+class TOMLConfigLoader(ConfigLoader[dict[str, object]]):
+    @T.override
+    def load(self, path: Path) -> dict[str, object]:
+        import tomllib  # noqa: PLC0415
 
-    If `file` contains a directory separator, it is resolved relative to CWD.
-    Otherwise, `find_config()` is used to find the file in CWD or its parents.
-    Once found, the file is loaded and its contents set as the global
-    configuration (`CONFIG`), which is also returned.
-    """
-
-    file = Path(file)
-    file = find_config(file) if file.name == str(file) else file.absolute()
-
-    with file.open("r") as stream:
-        data: object = yaml.safe_load(stream)
-
-    config = Config()
-    config.configure(data)
-    globals()["CONFIG"] = config
-    return config
+        with path.open("rb") as f:
+            return tomllib.load(f)
 
 
-# Automatically create and load CONFIG when it gets first accessed.
-def __getattr__(name: str) -> T.Any:
-    if name == "CONFIG":
-        return configure(DEFAULT_CONFIG)
-    raise AttributeError
+class YAMLConfigLoader(ConfigLoader[dict[str, object]]):
+    @T.override
+    def load(self, path: Path) -> dict[str, object]:
+        import yaml  # noqa: PLC0415
+
+        with path.open("rb") as f:
+            return yaml.safe_load(f)

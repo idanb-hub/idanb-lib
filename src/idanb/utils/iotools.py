@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import dataclasses
 import io
-import typing
 
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
+import typing_extensions as T
 
 
 @dataclasses.dataclass()
@@ -24,15 +22,15 @@ class TextIOAdapter(io.TextIOBase):
         self.__write = write
         self.__read = read
 
-    @typing.override
+    @T.override
     def writable(self) -> bool:
         return self.__write is not None
 
-    @typing.override
+    @T.override
     def readable(self) -> bool:
         return self.__read is not None
 
-    @typing.override
+    @T.override
     def write(self, string: str, /) -> int:
         if self.__write is None:
             errmsg = "not writable"
@@ -40,7 +38,7 @@ class TextIOAdapter(io.TextIOBase):
         written = self.__write(string)
         return len(string) if written is None else written
 
-    @typing.override
+    @T.override
     def read(self, size: int | None = -1, /) -> str:
         if self.__read is None:
             errmsg = "not readable"

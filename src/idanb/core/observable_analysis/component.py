@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import json
-import typing
 
+import typing_extensions as T
 import pydantic
-import reacton
 import structlog
 from ipymui import callback
 from ipymui.components import mui
@@ -13,21 +12,16 @@ from analytics.connectors.intelowl.models import (
     PluginModel,
     PluginStatus,
 )
-from idanb import ui
+from idanb import react
 from idanb.infra import intelowl
-
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
-    from reacton.core import Element
-
 
 _logger = structlog.get_logger()
 
 
-type AnalyzerReportCompoment = T.Callable[[T.Any], Element[T.Any]]
+type AnalyzerReportCompoment = T.Callable[[T.Any], react.Element[T.Any]]
 
 
-@typing.final
+@T.final
 class analyzer_report_component:  # noqa: N801
     _components: T.ClassVar[dict[str, AnalyzerReportCompoment]] = {}
 
@@ -55,12 +49,12 @@ def _job_progress(job: intelowl.models.Job) -> float:
     return finished_count / len(job.analyzer_reports) * 100
 
 
-@reacton.component
+@react.component
 def IntelOwl_ObservableAnalysis(  # noqa: N802
     *,
     analyzers: T.Sequence[str | type[PluginModel]],
 ) -> None:
-    connector = reacton.use_memo(lambda: intelowl.IntelOwl())
+    connector = react.use_memo(lambda: intelowl.IntelOwl())
 
     names = [
         analyzer if isinstance(analyzer, str) else analyzer.name
@@ -72,7 +66,7 @@ def IntelOwl_ObservableAnalysis(  # noqa: N802
         if not isinstance(analyzer, str)
     }
 
-    selected_names, set_selected_names = reacton.use_state(list(names))
+    selected_names, set_selected_names = react.use_state(list(names))
     with mui.Stack(direction="column", gap=1):
         with mui.ToggleButtonGroup(
             value=selected_names,
@@ -93,7 +87,7 @@ def IntelOwl_ObservableAnalysis(  # noqa: N802
             for name in names:
                 mui.ToggleButton(name, value=name)
 
-        observable, set_observable = reacton.use_state("")
+        observable, set_observable = react.use_state("")
         mui.TextField(
             defaultValue=observable,
             label="Observable",
@@ -101,12 +95,10 @@ def IntelOwl_ObservableAnalysis(  # noqa: N802
             fullWidth=True,
         )
 
-        submitted_names, set_submitted_names = reacton.use_state(list[str]())
-        job, set_job = reacton.use_state(
-            typing.cast("intelowl.models.Job | None", None),
-        )
+        submitted_names, set_submitted_names = react.use_state[list[str]]([])
+        job, set_job = react.use_state[intelowl.models.Job | None](None)
 
-        @ui.use_task()
+        @react.use_task()
         async def query_task() -> None:
             set_job(None)
 
@@ -156,12 +148,12 @@ def IntelOwl_ObservableAnalysis(  # noqa: N802
     )
 
 
-@reacton.component
+@react.component
 def AnalyzerReports(  # noqa: N802
     models: dict[str, type[intelowl.models.PluginModel] | None],
     reports: intelowl.models.PluginList,
 ) -> None:
-    tab, set_tab = reacton.use_state(reports[0]["name"])
+    tab, set_tab = react.use_state[str | None](reports[0]["name"])
 
     with mui.Tabs(value=tab, onChange=lambda _, value: set_tab(value)):
         for name in models:

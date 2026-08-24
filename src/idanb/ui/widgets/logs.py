@@ -1,18 +1,14 @@
 from __future__ import annotations
 
 import logging
-import typing
 from pathlib import Path
 
+import typing_extensions as T
 import anywidget
 import structlog
 import traitlets
 
 from idanb import utils
-
-if typing.TYPE_CHECKING:
-    import typing_extensions as T
-
 
 _LOG_LEVELS = {
     "DEBUG": logging.DEBUG,
@@ -67,7 +63,7 @@ class Logs(anywidget.AnyWidget):
 
         return handler
 
-    @typing.override
+    @T.override
     def close(self) -> None:
         self._logger.removeHandler(self._handler)
         super().close()
